@@ -850,6 +850,13 @@ function applyConnectives(sentences, items, data){
       const lc=sent.toLowerCase();
       if(cur.polarity==='neg' && (prev.polarity==='pos'||prev.polarity==='neu') && cur.slot!=='classroom'){
         if(Math.random()<0.6) conn=pickRandom(['That said, ','However, ','Even so, ']);
+      } else if(cur.polarity==='pos' && prev.polarity==='neg'){
+        // NEW: bridge the jump UP out of a negative sentence (e.g. the fixed band opener)
+        if(cur.concessive){
+          conn=pickRandom(['Despite this, ','That said, ','Even so, ']);
+        } else if(Math.random()<0.9){
+          conn=pickRandom(['That said, ','Even so, ','On a more positive note, ','Encouragingly, ']);
+        }
       } else if(cur.slot==='classroom' && prev.slot!=='classroom'){
         const mentions=['in class','in lessons','during lessons','class discussion',
           'classroom','class time',' lessons','class activities'].some(k=>lc.includes(k));
@@ -899,8 +906,13 @@ function buildComment(data){
     if(ckey && !(data.notes.classNotExam && NEG_CLASS_KEYS.has(ckey)))
       push(genClassroom(ckey,data,ctx),'classroom',classPol(data.participation,data.behaviour),6);
   }
-  if(data.examPrep>0)
+  if(data.examPrep>0){
     push(genExamPrep(data,ctx),'examPrep',prepPol(data.examPrep),5);
+    // Flag the "worked hard but weak result" contradiction so the connective is concessive
+    if(data.examGrade<=3 && data.examPrep>=4){
+      items[items.length-1].concessive=true;
+    }
+  }
 
   const sk=Object.entries(data.skills).filter(([k,v])=>v>0);
   if(sk.length){
