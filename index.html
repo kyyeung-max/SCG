@@ -127,7 +127,7 @@ h1 { text-align: center; font-size: 1.15rem; color: #1a365d; }
 <div style="margin-top:10px;"><span class="toggle-link" id="optToggle" onclick="toggleOptional()">▸ Optional personal details</span></div>
 <div id="optionalInputs" class="hidden" style="margin-top:8px;">
 <div class="form-row">
-<div class="form-group"><label>Leadership / ECA role</label><input type="text" id="ecaRole" placeholder="e.g. Chairperson of the Economics Society"></div>
+<div class="form-group"><label>Leadership / ECA role (just the role)</label><input type="text" id="ecaRole" placeholder="e.g. Chairperson of the Economics Society"></div>
 <div class="form-group"><label>Specific topic to revise</label><input type="text" id="reviseTopic" placeholder="e.g. elasticity"></div>
 </div>
 </div>
@@ -177,7 +177,7 @@ let batchQueue = [];
 let lastBatchData = [];
 const MIN_WORD_COUNT = 50;
 const MAX_WORD_COUNT = 90;
-const CAP_TARGET = 88;          // leave headroom for connectives (Fix 30)
+const CAP_TARGET = 88;
 const LS_KEY = 'scg_batch_v2';
 
 // ============================ CLASS DEFINITIONS ============================
@@ -202,7 +202,7 @@ const classConfigs = {
 };
 const ratingOptions = `<option value="0">No comment</option><option value="5">Excellent</option><option value="4">Good</option><option value="3">Satisfactory</option><option value="2">Developing</option><option value="1">Needs work</option>`;
 
-// ============================ PHRASE BANK ============================
+// ============================ PHRASE BANK (British spelling) ============================
 const PB = {
   examGrade: {
     7:[`{NAME} has produced an outstanding examination performance this term, reflecting exceptional dedication and ability.`,
@@ -373,14 +373,14 @@ const PB = {
   skillLabels: {
     concepts:{ shared:['understanding of key concepts','grasp of core ideas','command of the foundational principles','knowledge of the central ideas'],
       f1ces:['understanding of the concepts tested in short questions','recall of key terms and definitions','grasp of the core curriculum','knowledge of the foundational concepts'],
-      f4dse:['understanding and application of economic concepts','grasp of key economic theory','command of the syllabus content','handling of the increasingly demanding concepts'],
+      f4dse:['understanding of economic concepts','grasp of key economic theory','command of the syllabus content','handling of the increasingly demanding concepts'],
       ib:['understanding of economic theory','command of core economic principles','grasp of the central theoretical frameworks','handling of complex economic concepts'] },
     dataResponse:{ f1ces:['ability to tackle data-response questions','skill in interpreting source materials','ability to support answers with evidence from sources','handling of source-based questions'] },
     clarity:{ ib:['clarity of written explanations','precision in articulating economic reasoning','lucidity of written analysis','ability to explain ideas concisely'] },
-    essayStructure:{ ib:['essay structure and organisation','ability to construct well-organised essays','logical structuring of arguments','planning and organisation of essays'] },
+    essayStructure:{ ib:['organisation of essays','ability to construct well-organised essays','logical structuring of arguments','planning of essays'] },
     dataUse:{ ib:['use of data to support analysis','integration of data into written work','skill in referencing data to substantiate arguments','handling of data evidence'] },
     realWorld:{ ib:['use of real-world examples','ability to draw on contemporary examples','connection of theory to current events','application of theory to real situations'] },
-    arguments:{ ib:['quality of economic argumentation','depth and balance of arguments','analytical rigour in essays','development of well-reasoned arguments'] },
+    arguments:{ ib:['quality of economic argumentation','balance of arguments','analytical rigour in essays','development of well-reasoned arguments'] },
     dataInterpret:{ f4dse:['application of economic theories to exam questions','performance in multiple-choice questions','precision in answering exam questions','handling of short and long questions'] }
   },
 
@@ -602,11 +602,11 @@ const PB = {
        `the quality of {FN}'s class work points to greater ability than this particular exam reflects.`]
   },
 
-  eca:[`beyond the classroom, {FN} serves as {ECA}, carrying out {POSS} duties with care and responsibility.`,
-       `{FN} also contributes to school life as {ECA}, where {POSS} commitment is well demonstrated.`,
-       `as {ECA}, {FN} has shown {OBJ}self to be responsible and trustworthy.`,
-       `{FN} contributes meaningfully to the school as {ECA}, a role {SUBJ} fulfils with dedication.`,
-       `in {POSS} role as {ECA}, {FN} has demonstrated real commitment and reliability.`],
+  eca:[`{FN} also takes on the role of {ECA} in school life, fulfilling it with care and responsibility.`,
+       `{FN} contributes to school life through {POSS} role as {ECA}, where {POSS} commitment is clear.`,
+       `in {POSS} role as {ECA}, {FN} has shown real dedication and reliability.`,
+       `{FN} takes on the role of {ECA} with evident commitment.`,
+       `outside the classroom, {FN} fulfils the role of {ECA} with dedication.`],
   topic:[`revisiting the topic of {TOPIC} would be a worthwhile focus for {FN} going forward.`,
        `{FN} would benefit from some further review of {TOPIC} to consolidate {POSS} understanding.`,
        `a little more revision of {TOPIC} would round out {FN}'s grasp of the syllabus.`,
@@ -737,19 +737,15 @@ function getPronouns(p){
   if(p==='she') return {subj:'she',obj:'her',poss:'her',subjc:'She',possc:'Her'};
   return {subj:'he',obj:'him',poss:'his',subjc:'He',possc:'His'};
 }
-function firstName(data){ return data.name.trim(); }   // Fix 35: verbatim, no splitting
+function firstName(data){ return data.name.trim(); }
 
-// Fix 41: distinctive keywords / stock tails we don't want repeated across sentences
 const KW = ['mastery','command','grasp','understanding','foundation','revision',
   'preparation','potential','concept','theor','next level','throughout the term',
   'this term','reliable feature','steadily','consolidat','confiden',
-  'with support where helpful','going forward','next term','encouraged to'];
+  'with support where helpful','going forward','next term','encouraged to',
+  'responsib','trustworthy','reliab','integrity','dependable'];
 function keywordsIn(s){ const l=s.toLowerCase(); return KW.filter(k=>l.includes(k)); }
-// Fix 46: track the leading literal word of a template ({...} openers return null)
-function firstToken(tmpl){
-  const m=tmpl.trim().match(/^([A-Za-z']+)/);
-  return m ? m[1].toLowerCase() : null;
-}
+function firstToken(tmpl){ const m=tmpl.trim().match(/^([A-Za-z']+)/); return m?m[1].toLowerCase():null; }
 
 function pickFresh(pool, ctx){
   if(!pool||!pool.length) return null;
@@ -783,15 +779,28 @@ function getSkillLabel(skillId, cls){
 // ============================ POLARITY ============================
 function gradePol(g){ return g>=5?'pos':(g===4?'neu':'neg'); }
 function lvlPol(l){ return l>=4?'pos':(l===3?'neu':'neg'); }
-function prepPol(l){ return l>=4?'pos':'neg'; }       // Fix 8: L3 reads negatively
+function prepPol(l){ return l>=4?'pos':'neg'; }
 function classPol(p,b){ const v=[p,b].filter(x=>x>0); if(!v.length) return 'neu';
   const a=v.reduce((s,x)=>s+x,0)/v.length; return a>=4?'pos':(a>=3?'neu':'neg'); }
 
+// ============================ CLASSROOM KEY ============================
+function classroomKey(p,b){
+  if(p===0&&b===0) return '';
+  if(p===0&&b>0) return b>=4?'behaviour_only_high':(b===3?'behaviour_only_mid':'behaviour_only_low');
+  if(b===0&&p>0) return p>=4?'participation_only_high':(p===3?'participation_only_mid':'participation_only_low');
+  if(p>=4&&b>=4) return 'both_high';
+  if(p>=3&&b>=3) return 'both_mid';
+  if(p<=2&&b>=3) return 'quiet_but_focused';
+  if(b<=2&&p>=3) return 'active_but_distracted';
+  return 'both_low';
+}
+const NEG_CLASS_KEYS = new Set(['both_low','quiet_but_focused','active_but_distracted','participation_only_low','behaviour_only_low']);
+
 // ============================ POST-PROCESS ============================
 const ESC=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-function capFirst(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : s; }   // Fix 39
+function capFirst(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : s; }
 
-// Fix 1 + 42: name-density control (sentence-initial + mid-sentence)
+// Fix 1 + 42 + 50: name-density control
 function applyNameControl(sentences, data){
   const fn=firstName(data), full=data.name, pn=getPronouns(data.pronouns);
   const namePat=`(?:${ESC(full)}|${ESC(fn)})`;
@@ -800,6 +809,7 @@ function applyNameControl(sentences, data){
   const allRe=new RegExp(namePat,'g');
   const possMidRe=new RegExp(`(\\w+\\s)${namePat}'s\\b`,'g');
   const objRe=new RegExp(`\\b(help|helps|helped|benefit|benefits|for|lift|serve|serves|to|with|of)\\s+${namePat}\\b`,'g');
+  const clauseRe=new RegExp(`^([^,]+,\\s)${namePat}(?!'s)\\b`);   // Fix 50
   const NAME_CAP=2;
   let used=0;
   const out=[];
@@ -812,6 +822,7 @@ function applyNameControl(sentences, data){
     if(possOpenRe.test(s) && (over||prevStartsName)) s=s.replace(possOpenRe,pn.possc);
     else if(subjOpenRe.test(s) && (over||prevStartsName)) s=s.replace(subjOpenRe,pn.subjc);
     if(over){
+      s=s.replace(clauseRe,(m,pre)=>pre+pn.subj);
       s=s.replace(possMidRe,(m,pre)=>pre+pn.poss);
       s=s.replace(objRe,(m,v)=>v+' '+pn.obj);
     }
@@ -829,7 +840,6 @@ function lowerFirst(sentence, data){
   return sentence.charAt(0).toLowerCase()+sentence.slice(1);
 }
 
-// Fix 2,3,8,9,39: connective layer + capitalisation
 function applyConnectives(sentences, items, data){
   const out=[];
   out.push({text:capFirst(sentences[0]), conn:false, hl:!!items[0].hl});
@@ -870,7 +880,7 @@ function overallTone(data){
   if(data.notes.careless) r.push(2.5);
   let avg=r.reduce((a,b)=>a+b,0)/r.length;
   let tone = avg>=4?'positive':(avg>=2.5?'moderate':'negative');
-  if(data.examGrade<=3 && tone==='positive') tone='moderate';   // Fix 18
+  if(data.examGrade<=3 && tone==='positive') tone='moderate';
   if(data.examGrade<=2 && tone!=='negative') tone='moderate';
   return tone;
 }
@@ -883,8 +893,12 @@ function buildComment(data){
 
   push(genExamGrade(data,ctx),'examGrade',gradePol(data.examGrade),0);
 
-  if(data.participation>0||data.behaviour>0)
-    push(genClassroom(data,ctx),'classroom',classPol(data.participation,data.behaviour),6);
+  // Classroom — Fix 54: suppress a negative classroom line if "strong in class" note is ticked
+  if(data.participation>0||data.behaviour>0){
+    const ckey=classroomKey(data.participation,data.behaviour);
+    if(ckey && !(data.notes.classNotExam && NEG_CLASS_KEYS.has(ckey)))
+      push(genClassroom(ckey,data,ctx),'classroom',classPol(data.participation,data.behaviour),6);
+  }
   if(data.examPrep>0)
     push(genExamPrep(data,ctx),'examPrep',prepPol(data.examPrep),5);
 
@@ -902,7 +916,8 @@ function buildComment(data){
   if(data.notes.classNotExam) push(fillTemplate(pickFresh(N.classNotExam,ctx),data),'contrast','neu',4);
   if(data.notes.improved)     push(fillTemplate(pickFresh(N.improved,ctx),data),'improved','pos',5);
   if(data.notes.proactive)    push(fillTemplate(pickFresh(N.proactive,ctx),data),'trait','pos',7);
-  if(data.notes.responsible)  push(fillTemplate(pickFresh(N.responsible,ctx),data),'trait','pos',7);
+  // Fix 49: suppress Responsible note when an ECA role is provided (the ECA line already shows responsibility)
+  if(data.notes.responsible && !data.ecaRole) push(fillTemplate(pickFresh(N.responsible,ctx),data),'trait','pos',7);
   if(data.notes.timeManagement) push(fillTemplate(pickFresh(N.timeManagement,ctx),data),'weakness','neg',3);
   if(data.notes.careless)     push(fillTemplate(pickFresh(N.careless,ctx),data),'weakness','neg',4);
 
@@ -911,7 +926,6 @@ function buildComment(data){
 
   const tone=overallTone(data);
 
-  // Fix 16 + 40: guarantee a protected positive anchor for non-positive comments
   const hasPos=items.some(i=>i.polarity==='pos'&&i.slot!=='examGrade');
   if(!hasPos && tone!=='positive'){
     const f=pickFresh(PB.filler.positive,ctx);
@@ -920,7 +934,6 @@ function buildComment(data){
 
   padToMin(items,data,ctx,tone);
 
-  // Fix 47: closing tone follows arc; a praised strength prevents a negative close
   let closingTone=tone;
   const hasStrength=items.some(i=>i.slot==='strength'&&i.polarity==='pos');
   if(closingTone==='negative'&&hasStrength) closingTone='moderate';
@@ -953,7 +966,7 @@ function reorderBody(items){
   body.sort((a,b)=> (rank[a.polarity]-rank[b.polarity]) || (a._ord-b._ord));
   items.length=0; items.push(opener,...body,closing);
 }
-function enforceCap(items){   // Fix 30 + 40 (protect anchor)
+function enforceCap(items){
   const wc=()=>countWords(items.map(i=>i.text).join(' '));
   while(wc()>CAP_TARGET){
     let idx=-1,best=-1;
@@ -988,15 +1001,7 @@ function genExamPrep(data,ctx){ const t=pickFresh(PB.examPrep[data.examPrep],ctx
 function genStrength(id,lvl,data,ctx){ const t=pickFresh(PB.strengths[lvl],ctx); return t?fillTemplate(t,{...data,_skill:getSkillLabel(id,data.cls)}):''; }
 function genWeakness(id,lvl,data,ctx){ const t=pickFresh(PB.weaknesses[lvl],ctx); return t?fillTemplate(t,{...data,_skill:getSkillLabel(id,data.cls)}):''; }
 function genHomework(data,ctx){ const t=pickFresh(PB.homework[data.homework],ctx); return t?fillTemplate(t,data):''; }
-function genClassroom(data,ctx){
-  const p=data.participation,b=data.behaviour; let key='';
-  if(p===0&&b>0) key=b>=4?'behaviour_only_high':(b===3?'behaviour_only_mid':'behaviour_only_low');
-  else if(b===0&&p>0) key=p>=4?'participation_only_high':(p===3?'participation_only_mid':'participation_only_low');
-  else if(p>0&&b>0){
-    if(p>=4&&b>=4) key='both_high'; else if(p>=3&&b>=3) key='both_mid';
-    else if(p<=2&&b>=3) key='quiet_but_focused'; else if(b<=2&&p>=3) key='active_but_distracted';
-    else key='both_low';
-  } else return '';
+function genClassroom(key,data,ctx){
   const t=pickFresh(PB.classroom[key],ctx); return t?fillTemplate(t,data):'';
 }
 function genClosing(data,ctx,tone){
@@ -1023,7 +1028,7 @@ function toggleOptional(){
   const open=el.classList.toggle('hidden');
   document.getElementById('optToggle').textContent=(open?'▸':'▾')+' Optional personal details';
 }
-function colourPronoun(){   // Fix 45
+function colourPronoun(){
   const el=document.getElementById('pronouns');
   el.classList.remove('sel-he','sel-she');
   if(el.value==='he') el.classList.add('sel-he');
@@ -1097,7 +1102,7 @@ function renderBatchList(){
 function escAttr(s){ return s.replace(/</g,'&lt;'); }
 function togglePron(i){ batchQueue[i].pronouns=batchQueue[i].pronouns==='she'?'he':'she'; saveBatch(); renderBatchList(); }
 function removeBatchItem(i){ batchQueue.splice(i,1); saveBatch(); renderBatchList(); }
-function moveBatchItem(i,dir){   // Fix 44
+function moveBatchItem(i,dir){
   const j=i+dir; if(j<0||j>=batchQueue.length) return;
   const tmp=batchQueue[i]; batchQueue[i]=batchQueue[j]; batchQueue[j]=tmp;
   saveBatch(); renderBatchList();
@@ -1123,7 +1128,7 @@ function generateBatch(){
   });
   batchOutputContent.innerHTML=html;
   outputBatch.classList.add('visible');
-  initBatchWC();   // Fix 36: immediate counts
+  initBatchWC();
 }
 function renderBlock(idx,d,c){
   const cls=d.pronouns==='she'?'pron-she':'pron-he';
@@ -1159,7 +1164,7 @@ function copyAllBatch(){
   });
   navigator.clipboard.writeText(all.trim());
 }
-function copyForExcel(){   // Fix 43: comments only, one per line, queue order
+function copyForExcel(){
   const rows=[];
   document.querySelectorAll('.student-comment-block .output-text').forEach(t=>{
     rows.push(t.innerText.replace(/[\t\r\n]+/g,' ').replace(/\s+/g,' ').trim());
