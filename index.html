@@ -30,6 +30,9 @@ h1 { text-align: center; font-size: 1.15rem; color: #1a365d; cursor: pointer; us
 .btn-red { background: #e53e3e; padding: 7px 13px; } .btn-red:hover { background: #c53030; }
 .btn-grey { background: #718096; } .btn-grey:hover { background: #4a5568; }
 .btn-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.coverage-meter { font-size: 0.76rem; font-weight: 600; padding: 7px 11px; border-radius: 6px; margin-top: 10px; }
+.cov-green { background: #f0fff4; color: #276749; border-left: 3px solid #48bb78; }
+.cov-amber { background: #fffaf0; color: #975a16; border-left: 3px solid #ed8936; }
 .output-card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); display: none; margin-bottom: 12px; }
 .output-card.visible { display: block; }
 .output-label { font-size: 0.72rem; font-weight: 600; color: #4a5568; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
@@ -77,7 +80,7 @@ h1 { text-align: center; font-size: 1.15rem; color: #1a365d; cursor: pointer; us
 <div class="tab" id="tabBatch" onclick="switchTab('batch')">Batch Mode</div>
 </div>
 
-<div class="card">
+<div class="card" id="mainCard">
 <div class="section-title">Student Information</div>
 <div class="form-row">
 <div class="form-group"><label>Student Name (as it should appear)</label><input type="text" id="studentName" placeholder="e.g. Tsz Ho"></div>
@@ -137,6 +140,8 @@ h1 { text-align: center; font-size: 1.15rem; color: #1a365d; cursor: pointer; us
 </div>
 </div>
 
+<div class="coverage-meter cov-amber" id="coverageMeter">Coverage: 0 aspects — a little thin.</div>
+
 <div class="btn-row">
 <button class="btn" onclick="generateSingle()" id="btnGenerate">Generate Comment</button>
 <button class="btn-secondary hidden" id="btnAddBatch" onclick="addToBatch()">+ Add to Batch</button>
@@ -185,10 +190,9 @@ let lastBatchData = [];
 let lastBatchComments = [];
 const MIN_WORD_COUNT = 50;
 const MAX_WORD_COUNT = 90;
-const CAP_TARGET = 84;
+const CAP_TARGET = 80;
 const LS_KEY = 'scg_batch_v2';
 
-// diagnostics
 let diagMode = false;
 let titleClicks = 0;
 let titleTimer = null;
@@ -226,6 +230,9 @@ const classConfigs = {
     {id:'dataInterpret',label:'MC / Data Skills'}]}
 };
 const ratingOptions = `<option value="0">No comment</option><option value="5">Excellent</option><option value="4">Good</option><option value="3">Satisfactory</option><option value="2">Developing</option><option value="1">Needs work</option>`;
+
+// data/analysis-related skills (for #6 / generic-weakness gating)
+const DATA_SKILLS = new Set(['dataResponse','dataUse','dataInterpret']);
 
 // ============================ PHRASE BANK (British spelling) ============================
 const PB = {
@@ -310,26 +317,27 @@ const PB = {
        `{NAME} has shown developing competence this term, reflected in a satisfactory grade.`,
        `{NAME}'s result this term is sound and points to encouraging potential ahead.`,
        `{NAME} has produced a sound and competent examination performance this term.`],
-    3:[`{NAME}'s examination result this term is a little below potential, and a more focused approach would lift future outcomes.`,
-       `{NAME} has found certain parts of the course challenging, and further consolidation would be beneficial.`,
-       `{NAME}'s performance this term suggests that revisiting the core material would be valuable.`,
-       `{NAME} has scope to grow, and is encouraged to dedicate more time to revisiting key topics.`,
+    /* C6: low-band openers re-tagged to be OBSERVATIONAL (state the result first) */
+    3:[`{NAME}'s examination result this term is a little below {POSS} potential, with clear scope for a more focused approach.`,
+       `{NAME} has found certain parts of the course challenging this term.`,
+       `{NAME}'s performance this term suggests the core material is not yet fully secure.`,
+       `{NAME}'s result this term shows clear scope to grow in a few key topics.`,
        `{NAME}'s exam result points to clear room for growth in a few core areas.`,
-       `{NAME}'s result this term shows room to grow, and steadier consolidation would help lift future outcomes.`,
+       `{NAME}'s result this term shows room to grow, with steadier consolidation still needed.`,
        `{NAME}'s result this term sits a little below {POSS} potential, with clear room to build.`,
-       `{NAME} has found some topics demanding this term, and revisiting them would be worthwhile.`,
-       `{NAME} would benefit from firming up the core material to lift {POSS} results next term.`,
-       `{NAME}'s examination performance suggests a more methodical approach would pay off.`],
-    2:[`{NAME}'s result this term indicates that more consistent revision would help unlock further progress.`,
-       `{NAME} has found the course demanding this term, and a more structured approach to study would be beneficial.`,
-       `{NAME} is encouraged to take a steadier, more methodical approach to lift future results.`,
-       `{NAME} would benefit from revisiting the foundations to build {POSS} confidence next term.`,
-       `{NAME} has room to grow this term, and a clearer study routine would make a real difference.`,
-       `{NAME} is encouraged to focus on the core material steadily, which will help future progress.`],
-    1:[`{NAME} has found the demands of the course challenging this term, and additional support would be valuable going forward.`,
-       `{NAME} is warmly encouraged to seek extra help and adopt a more structured approach to revision.`,
-       `{NAME} would benefit from focused support to build a firmer foundation next term.`,
-       `{NAME} is encouraged to take a fresh, steady approach next term, with support where helpful.`]
+       `{NAME} has found some topics demanding this term.`,
+       `{NAME}'s result this term indicates the core material is not yet fully secure.`,
+       `{NAME}'s examination performance this term points to a need for a more methodical approach.`],
+    2:[`{NAME}'s result this term indicates that the core material is not yet secure.`,
+       `{NAME} has found the course demanding this term.`,
+       `{NAME}'s result this term reflects the challenge {SUBJ} has faced with the course.`,
+       `{NAME}'s result this term suggests the foundations are not yet secure.`,
+       `{NAME} has found this term's work challenging, with clear room to grow.`,
+       `{NAME}'s result this term shows the core material needs further consolidation.`],
+    1:[`{NAME} has found the demands of the course challenging this term.`,
+       `{NAME} has found this term's work demanding, and additional support would be valuable.`,
+       `{NAME}'s result this term reflects real challenges with the course material.`,
+       `{NAME} has found the course challenging this term, with a firmer foundation needed.`]
   },
 
   examPrep: {
@@ -470,7 +478,7 @@ const PB = {
     4:[`{POSSC} {SKILL} is a notable strength.`,
        `{FN} shows commendable {SKILL}, which supports the overall performance well.`,
        `it is encouraging to note that {FN}'s {SKILL} is well developed.`,
-       `{FN} demonstrates good {SKILL}, a positive aspect of the work.`,
+       `{FN} demonstrates good {SKILL}, a real positive in the work.`,
        `{POSSC} {SKILL} is a clear asset in {POSS} performance.`,
        `{POSSC} {SKILL} has developed well and underpins {POSS} progress.`,
        `{POSSC} {SKILL} is solid and reliable.`,
@@ -479,7 +487,7 @@ const PB = {
        `{POSSC} {SKILL} supports {POSS} work effectively and continues to grow.`,
        `{POSSC} {SKILL} is solid and bodes well for further progress.`,
        `it is pleasing to see how well {FN}'s {SKILL} is coming along.`,
-       `{POSSC} {SKILL} is sound and adds real value to the work.`,
+       `{POSSC} {SKILL} is sound and genuinely dependable.`,
        `{POSSC} {SKILL} is well developed and serves {OBJ} well.`,
        `{POSSC} {SKILL} is a good feature of {POSS} performance this term.`,
        `{POSSC} {SKILL} is assured and continues to grow.`,
@@ -487,7 +495,7 @@ const PB = {
        `{FN} shows good {SKILL}, a positive sign for the future.`,
        `{POSSC} {SKILL} is reliably good and supports {POSS} results.`,
        `{POSSC} {SKILL} is encouraging and continues to develop.`],
-    3:[`{POSSC} {SKILL} is reasonable and provides a foundation to build upon.`,
+    3:[`{POSSC} {SKILL} is reasonable and provides a base to develop from.`,
        `{POSSC} {SKILL} is at a satisfactory level and developing steadily.`,
        `{POSSC} {SKILL} is developing and shows clear potential.`,
        `{POSSC} {SKILL} is improving steadily.`,
@@ -497,7 +505,7 @@ const PB = {
        `{POSSC} {SKILL} is satisfactory and moving in the right direction.`,
        `{FN} is developing {POSS} {SKILL} at a steady and promising pace.`,
        `{POSSC} {SKILL} shows clear potential to strengthen further.`,
-       `{FN} demonstrates a sound foundation in {POSS} {SKILL}.`,
+       `{FN} demonstrates a sound grasp of {POSS} {SKILL}.`,
        `{POSSC} {SKILL} is progressing nicely and shows good promise.`]
   },
   weaknesses:{
@@ -508,14 +516,19 @@ const PB = {
        `focused work on {POSS} {SKILL} would help {FN} reach the next level.`,
        `{FN} would benefit from steady practice to build {POSS} {SKILL}.`,
        `developing {POSS} {SKILL} a little further would round out {FN}'s performance nicely.`,
-       `{FN} is encouraged to keep working on {POSS} {SKILL}, which will lift future results.`,
-       `there is room for {FN} to develop {POSS} analytical and evaluative skills.`,
-       `{FN} would benefit from moving beyond description to fuller analysis of the data.`,
-       `{FN} is encouraged to make fuller use of the information in the sources.`],
+       `{FN} is encouraged to keep working on {POSS} {SKILL}, which will lift future results.`],
     1:[`{FN} is warmly encouraged to keep working on {POSS} {SKILL}, with support where helpful.`,
        `developing {POSS} {SKILL} a little further would clearly benefit {FN}.`,
        `{POSSC} {SKILL} is an area to keep building on going forward.`,
        `{FN} would gain from focused, supported practice on {POSS} {SKILL}.`]
+  },
+  /* generic data/analysis weakness lines — gated to data-related skills (#6) */
+  weaknessesData:{
+    2:[`there is room for {FN} to develop {POSS} analytical and evaluative skills.`,
+       `{FN} would benefit from moving beyond description to fuller analysis of the data.`,
+       `{FN} is encouraged to make fuller use of the information in the sources.`],
+    1:[`{FN} is encouraged to keep developing {POSS} handling of data, with support where helpful.`,
+       `fuller analysis of source material is an area for {FN} to keep building on.`]
   },
 
   classroom:{
@@ -523,13 +536,13 @@ const PB = {
        `{SUBJ} participates actively and maintains an excellent standard of focus and conduct.`,
        `{FN} brings a positive and focused attitude to lessons, contributing constructively.`,
        `{FN} is a pleasure to teach — attentive, engaged, and consistently well-behaved.`,
-       `{SUBJC} is a focused and active participant who makes valuable contributions to the class.`,
+       `{SUBJC} is a focused and active participant who makes valuable contributions in lessons.`,
        `{FN} is not afraid to ask questions to clarify ideas and engages thoughtfully throughout lessons.`,
        `{POSSC} attentive engagement and constructive contributions are very much appreciated.`,
        `{FN} participates with enthusiasm and responds to others' viewpoints with readiness.`,
        `{FN} is an enthusiastic and well-mannered contributor to every lesson.`,
        `{SUBJC} engages thoughtfully in discussions and sets a fine example in conduct.`,
-       `{FN} is consistently attentive and offers insightful contributions to the class.`,
+       `{FN} is consistently attentive and offers insightful contributions in lessons.`,
        `{FN} takes an active, focused part in lessons and works well with {POSS} peers.`,
        `{POSSC} lively yet disciplined participation enriches the learning of the whole class.`,
        `{FN} contributes ideas readily and maintains exemplary focus throughout.`,
@@ -537,7 +550,7 @@ const PB = {
        `{SUBJC} participates eagerly and conducts {OBJ}self admirably in class.`,
        `{FN} is a model of engagement and good conduct during lessons.`,
        `{FN} brings energy and focus to discussions, contributing with both enthusiasm and courtesy.`,
-       `While always attentive, {FN} contributes thoughtfully and works well with {POSS} peers.`,
+       `{FN} is attentive in lessons, contributes thoughtfully, and works well with {POSS} peers.`,
        `{FN} works extremely well and productively with {POSS} peers.`],
     both_mid:[`{FN} generally maintains good focus and participates when called upon.`,
        `{SUBJ} shows a steady level of engagement and appropriate conduct.`,
@@ -591,7 +604,7 @@ const PB = {
        `{FN} would benefit from contributing more frequently in class.`,
        `{FN} is warmly encouraged to voice {POSS} ideas more often during lessons.`],
     behaviour_only_high:[`{FN} maintains an excellent standard of conduct during lessons.`,
-       `{SUBJC} is well-behaved and focused in class, setting a good example.`,
+       `{SUBJC} is well-behaved and focused in class.`,
        `{POSSC} classroom conduct is commendable and adds to a positive learning environment.`,
        `{FN} demonstrates exemplary focus and conduct throughout lessons.`,
        `{FN} is courteous, attentive and a calming presence in the classroom.`,
@@ -700,6 +713,10 @@ const PB = {
        `spending some time revisiting {TOPIC} would strengthen {FN}'s foundations.`,
        `{FN} is encouraged to give the topic of {TOPIC} some focused attention next term.`],
 
+  /* bridging clause for band-vs-body reconciliation (#1 / D1 — held for next pass, harmless if unused) */
+  bridge:[`though this is not yet fully reflected in {POSS} examination result`,
+       `even if the examination result does not yet show it`],
+
   closing:{
     positive:[`{FN} should be proud of {POSS} achievements this term.`,
        `a genuinely strong term of work — well done!`,
@@ -733,7 +750,7 @@ const PB = {
        `keep it up — more encouraging results are well within reach!`,
        `with steady effort, {FN} has every chance of building on this next term.`,
        `I look forward to supporting {FN}'s ongoing progress.`,
-       `{FN} has a sound platform to build on, and I encourage {OBJ} to push on.`,
+       `{FN} has a sound platform to develop from, and I encourage {OBJ} to push on.`,
        `a little more consistency will help {FN} realise {POSS} clear potential.`,
        `I am confident brighter results lie ahead for {FN} with continued effort.`,
        `{FN} is heading in the right direction — keep going!`,
@@ -741,7 +758,7 @@ const PB = {
        `there is real promise here, and I look forward to {FN}'s next steps.`,
        `{FN} has the ability to achieve more, and I encourage {OBJ} to keep striving.`,
        `steady, continued effort will serve {FN} well next term.`,
-       `I look forward to {FN} building confidently on this foundation.`,
+       `I look forward to {FN} building confidently on this term's work.`,
        `with persistence, {FN} is well able to reach the next level.`],
     negative:[`with continued effort and support, I am confident {FN} will make steady progress.`,
        `I encourage {FN} to take a proactive approach next term and make full use of available support.`,
@@ -822,6 +839,10 @@ const IB_YEAR = {
   }
 };
 
+// drop-priority used by enforceCap / advice-cap / post-cohesion trim
+const DROPRANK = { closing:100, filler:90, homework:80, classroom:70, trait:60, academic:55,
+                   strength2:50, improved:50, contrast:50, examtarget:40, weakness:35, strength:30, examPrep:25 };
+
 // ============================ HELPERS ============================
 function pickRandom(a){ return a[Math.floor(Math.random()*a.length)]; }
 function countWords(s){ return s.trim().split(/\s+/).filter(Boolean).length; }
@@ -839,7 +860,6 @@ const KW = ['mastery','command','grasp','understanding','foundation','revision',
   'responsib','trustworthy','reliab','integrity','dependable'];
 function keywordsIn(s){ const l=s.toLowerCase(); return KW.filter(k=>l.includes(k)); }
 
-// #2 fix: placeholder-aware opener token
 function firstToken(tmpl){
   const t=tmpl.trim();
   const ph=t.match(/^\{(\w+)\}/);
@@ -872,10 +892,11 @@ function fillTemplate(t, data){
     .replace(/{SKILL}/g,data._skill||'').replace(/{ECA}/g,data.ecaRole||'')
     .replace(/{TOPIC}/g,data.reviseTopic||'');
 }
-function getSkillLabel(skillId, cls){
+function getSkillLabel(skillId, cls, avoid){
   const node=PB.skillLabels[skillId]||{};
   const fam=classFamily(cls);
-  const pool=[...(node.shared||[]),...(node[fam]||[]),...(node[cls]||[])];
+  let pool=[...(node.shared||[]),...(node[fam]||[]),...(node[cls]||[])];
+  if(avoid) pool=pool.filter(x=>x!==avoid).length?pool.filter(x=>x!==avoid):pool;
   return pool.length?pickRandom(pool):'performance in this area';
 }
 
@@ -911,40 +932,76 @@ const ESC=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 function capFirst(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : s; }
 function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// #1 FIX: verb-aware object fallback so embedded-clause subjects render as subject pronouns
-function applyNameControl(sentences, data){
-  const full=data.name, pn=getPronouns(data.pronouns);
-  const namePat=ESC(full);
-  const nameG=new RegExp(namePat,'g');
+// object-trigger set: name is an OBJECT only when preceded by one of these (A1 inversion)
+function objTrigRe(namePat){
+  return new RegExp(`(\\b(?:help|helps|helped|benefit|benefits|benefited|support|supports|supported|serve|serves|served|gave|give|gives|given|let|lets|teach|teaches|taught|see|sees|saw|seeing|for|to|with|of|about|alongside)\\s+)${namePat}\\b(?!')`,'gi');
+}
+
+// pronounise a sentence; keepFirst keeps the first name occurrence intact
+function pronouniseNames(s, data, keepFirst){
+  const pn=getPronouns(data.pronouns), namePat=ESC(data.name);
+  if(keepFirst){
+    const m=s.match(new RegExp(namePat));
+    if(m){
+      let keepLen=m[0].length;
+      if(s.substr(m.index+m[0].length,2)==="'s") keepLen+=2;
+      const cut=m.index+keepLen;
+      return s.slice(0,cut)+pronouniseNames(s.slice(cut),data,false);
+    }
+    return s;
+  }
   const possOpenRe=new RegExp(`^${namePat}'s\\b`);
   const subjOpenRe=new RegExp(`^${namePat}\\b`);
-  const VERB='(?:is|was|are|were|has|have|had|will|would|can|could|should|shall|may|might|does|do|did|demonstrates|demonstrated|shows|showed|contributes|contributed|engages|engaged|participates|maintains|works|worked|came|comes|made|makes|takes|took|approaches|approached|brings|brought|listens|continues|continued|remains|remained|tends|tackles|handles|handled|produces|produced|achieves|achieved|performs|performed|sets|set|put|puts|values|valued|aspires|stays|stayed|asks|asked|offers|offered|examines|examined|goes|regularly|always|consistently|readily|now|often|frequently)';
-  const verbLA=new RegExp(`${namePat}\\b(?!')(?=\\s+${VERB}\\b)`,'g');
+  if(possOpenRe.test(s)) s=s.replace(possOpenRe,pn.possc);
+  else if(subjOpenRe.test(s)) s=s.replace(subjOpenRe,pn.subjc);
+  s=s.replace(new RegExp(`${namePat}'s\\b`,'g'),pn.poss);
+  s=s.replace(objTrigRe(namePat),'$1'+pn.obj);
+  s=s.replace(new RegExp(`([—–-]\\s+|,\\s+)${namePat}\\b(?!')`,'g'),'$1'+pn.subj);
+  s=s.replace(new RegExp(`${namePat}\\b(?!')`,'g'),pn.subj);
+  return s;
+}
+
+// C8 + even distribution: name control is now bidirectional
+function applyNameControl(sentences, data){
+  const pn=getPronouns(data.pronouns), namePat=ESC(data.name);
+  const nameG=new RegExp(namePat,'g');
+  const countName=s=> s ? (s.match(nameG)||[]).length : 0;
   const N=sentences.length;
-  const mid=Math.ceil(N/2);
-  let frontUsed=0, backUsed=0;
+  const leadSubj=new RegExp(`^${ESC(pn.subjc)}\\b`);
+  const leadPoss=new RegExp(`^${ESC(pn.possc)}\\b`);
+  const bearable=i=> sentences[i] && (countName(sentences[i])>0 || leadSubj.test(sentences[i]) || leadPoss.test(sentences[i]));
+
+  const targetCount = Math.min(N, N>=6?3:2);
+  const chosen=[0];                       // opener always keeps the name
+  const remaining=targetCount-1;
+  for(let k=1;k<=remaining;k++){
+    const ideal=Math.round(k*(N-1)/(remaining+0.5)); // spread inward, not clustered at the end
+    let pick=-1;
+    for(let d=0; d<N && pick<0; d++){
+      for(const cand of [ideal-d, ideal+d]){
+        if(cand>0 && cand<N && !chosen.includes(cand) && bearable(cand)
+            && !chosen.some(c=>Math.abs(c-cand)<=1)){ pick=cand; break; }
+      }
+    }
+    if(pick>=0) chosen.push(pick);
+  }
+  const chosenSet=new Set(chosen);
+
   const out=[];
-  for(let i=0;i<sentences.length;i++){
+  for(let i=0;i<N;i++){
     let s=sentences[i];
     if(!s){ out.push(s); continue; }
-    const region = i<mid ? 'front' : 'back';
-    const regionUsed = region==='front' ? frontUsed : backUsed;
-    const prev=out[i-1]||'';
-    const prevStartsName = possOpenRe.test(prev)||subjOpenRe.test(prev);
-    const over = regionUsed>=1 || prevStartsName;
-    const hasName = (s.match(nameG)||[]).length>0;
-    if(hasName && over){
-      if(possOpenRe.test(s)) s=s.replace(possOpenRe,pn.possc);
-      else if(subjOpenRe.test(s)) s=s.replace(subjOpenRe,pn.subjc);
-      s=s.replace(new RegExp(`${namePat}'s\\b`,'g'),pn.poss);
-      s=s.replace(new RegExp(`(^|[—–-]\\s+|,\\s+)${namePat}\\b(?!')`,'g'),
-        (m,pre)=>pre+(pre===''?pn.subjc:pn.subj));
-      // verb-aware: any remaining Name immediately followed by a verb is a subject
-      s=s.replace(verbLA,pn.subj);
-      // genuine object positions
-      s=s.replace(new RegExp(`${namePat}\\b(?!')`,'g'),pn.obj);
+    if(chosenSet.has(i)){
+      if(countName(s)>0){
+        s=pronouniseNames(s,data,true);          // keep first name, pronounise the rest
+      } else if(leadPoss.test(s)){
+        s=s.replace(leadPoss, data.name+"'s");    // promote a leading pronoun back to the name
+      } else if(leadSubj.test(s)){
+        s=s.replace(leadSubj, data.name);
+      }
+    } else {
+      s=pronouniseNames(s,data,false);            // all names -> pronouns
     }
-    if((s.match(nameG)||[]).length>0){ region==='front'?frontUsed++:backUsed++; }
     out.push(s);
   }
   return out;
@@ -965,10 +1022,15 @@ function asContinuation(text, data){
   return text.charAt(0).toLowerCase()+text.slice(1);
 }
 
-// ============================ #3 DETECTIVE REPEAT PASS ============================
+// ============================ DETECTIVE REPEAT PASS ============================
 const HARD_STOP=new Set(('a an the and or but to of in on for with as at by from this that these those his her him he she they their them is are was were be been being has have had will would can could should shall may might do does did not no nor so if then than there here into out up down over under above below about such both each all any some every one two three first second third next last more most very much well also when while though although because since who whom whose which what it its i you your we our us my me himself herself themselves yet just only own same too s t re ll ve d').split(' '));
 const SOFT_OK=new Set('exam examination examinations paper assessment result results class classes lesson lessons school subject students student time term'.split(' '));
 const FAM={build:'famC',builds:'famC',building:'famC',foundation:'famC',foundations:'famC',platform:'famC',platforms:'famC',footing:'famC',groundwork:'famC'};
+function buildNameSet(data){
+  const s=new Set();
+  data.name.toLowerCase().split(/\s+/).forEach(w=>{ const b=w.replace(/'s?$/,''); s.add(w); s.add(b); });
+  return s;
+}
 function stemWord(w){
   w=w.toLowerCase();
   if(w.length>4 && w.endsWith('ly')) w=w.slice(0,-2);
@@ -985,18 +1047,20 @@ function wordTokens(text){ return (text.toLowerCase().match(/[a-z']+/g)||[]); }
 function crossStems(text, nameSet){
   const out=[];
   for(const w of wordTokens(text)){
-    if(w.length<3) continue;
-    if(HARD_STOP.has(w)||SOFT_OK.has(w)||nameSet.has(w)) continue;
-    out.push(FAM[w]||stemWord(w));
+    const bare=w.replace(/'s?$/,'');
+    if(bare.length<3) continue;
+    if(HARD_STOP.has(bare)||SOFT_OK.has(bare)||nameSet.has(bare)) continue;
+    out.push(FAM[bare]||stemWord(bare));
   }
   return [...new Set(out)];
 }
 function strictTokens(text, nameSet){
   const arr=[];
   for(const w of wordTokens(text)){
-    if(w.length<3) continue;
-    if(HARD_STOP.has(w)||nameSet.has(w)) continue;
-    arr.push(FAM[w]||stemWord(w));
+    const bare=w.replace(/'s?$/,'');
+    if(bare.length<3) continue;
+    if(HARD_STOP.has(bare)||nameSet.has(bare)) continue;
+    arr.push(FAM[bare]||stemWord(bare));
   }
   return arr;
 }
@@ -1004,7 +1068,7 @@ function repeatedWithin(arr){ const seen=new Set(); for(const s of arr){ if(seen
 function sharedStem(aTokens,bTokens){ const B=new Set(bTokens); for(const s of aTokens){ if(B.has(s)) return s; } return null; }
 
 function detectiveRepeat(items, data, diag){
-  const nameSet=new Set(data.name.toLowerCase().split(/\s+/));
+  const nameSet=buildNameSet(data);
   for(let pass=0; pass<3; pass++){
     let changed=false;
     const cross=items.map(it=>crossStems(it.text,nameSet));
@@ -1038,93 +1102,102 @@ function detectiveRepeat(items, data, diag){
     }
     if(!changed) break;
   }
+  // fallback: drop an exact-duplicate sentence the re-roll couldn't escape, if length allows
+  for(let i=items.length-1;i>=1;i--){
+    if(items[i].protected || DROPRANK[items[i].slot]===undefined) continue;
+    const dup = items.slice(0,i).some(o=>o.text===items[i].text);
+    if(dup){
+      const remain=items.filter((_,k)=>k!==i).map(x=>x.text).join(' ');
+      if(countWords(remain)>=MIN_WORD_COUNT){ diag.drops.push({slot:items[i].slot,text:items[i].text}); items.splice(i,1); }
+    }
+  }
 }
 
-// ============================ #17 COHESION PASS (FUSE / LINK / BREAK) ============================
+// ============================ COHESION PASS (FUSE / LINK / BREAK) ============================
 function pickConn(arr,used){ const f=arr.filter(x=>!used.has(x)); const c=pickRandom(f.length?f:arr); used.add(c); return c; }
+function heavyCoord(t){ return ((t.match(/\b(?:and|but|or|nor|yet|so|though|although|whereas)\b/gi)||[]).length + (t.match(/;/g)||[]).length); }
 
 function cohesionPass(items, data, diag){
-  const nameSet=new Set(data.name.toLowerCase().split(/\s+/));
-  const SUBORD=/^(While|Through|When|Having|By|Although|As|Despite|To build|Looking|Going|Encourag|On a|That said|However|Even so|Nonetheless)/i;
+  const nameSet=buildNameSet(data);
+  const SUBORD=/^(While|Through|When|Having|By|Although|As|Despite|To build|Looking|Going|Encourag|On a|That said|However|Even so|Nonetheless|In class|During)/i;
   const LEAD_ADV=/^(with|through|by|given|after|having|in)\b[^,]{3,70},\s/i;
-  const COMPLEX=/,\s+(and|but|though|although|which|while|as well as|and so)\b|;\s/i;
-  const units=[];
-  let cur={ text: items[0].text, hl: items[0].hl, pol: items[0].polarity, slot: items[0].slot, words: countWords(items[0].text), marker:null };
-  let fuseCount=0;
+  const liftMarkers=['That said, ','Encouragingly, ','On a more positive note, ','Nonetheless, '];
   const markerUsed=new Set();
-  let lastWasMarker=false;
 
-  const stemClash=(a,b)=> !!sharedStem(crossStems(a,nameSet), crossStems(b,nameSet));
+  // B2: choose a marker whose stem does not already appear in the target sentence
+  const pickMarker=(pool,target)=>{
+    const tg=new Set(crossStems(target,nameSet));
+    let cand=pool.filter(m=>crossStems(m,nameSet).every(s=>!tg.has(s)));
+    if(!cand.length) cand=pool;
+    return pickConn(cand,markerUsed);
+  };
+
+  const units=[];
+  let cur={ text: items[0].text, hl: items[0].hl, pol: items[0].polarity, slot: items[0].slot, words: countWords(items[0].text), marker:null, lift:false };
+  let fuseCount=0, lastWasMarker=false;
 
   for(let i=1;i<items.length;i++){
     const it=items[i];
     const prevPol=cur.pol, curPol=it.polarity;
-    const startsSub = SUBORD.test(it.text.trim());
-    const startsAdv = LEAD_ADV.test(it.text.trim());
-    const lenOK = (cur.words + countWords(it.text)) <= 30;
-    const clash = stemClash(cur.text, it.text);
-    const tooComplex = COMPLEX.test(cur.text) || COMPLEX.test(it.text);
-    const samePoint = (['strength','academic'].includes(cur.slot) && ['strength','academic'].includes(it.slot) && prevPol==='pos' && curPol==='pos');
+    const startsSub=SUBORD.test(it.text.trim());
+    const startsAdv=LEAD_ADV.test(it.text.trim());
+    const fillerInvolved = cur.slot==='filler' || it.slot==='filler';            // B4
+    const noCoord = heavyCoord(cur.text)===0 && heavyCoord(it.text)===0;         // B1
+    const canFuse = noCoord && !fillerInvolved && fuseCount<2;
     let decision='break', connector=null, marker=null, rel='';
 
     if(it.slot==='closing'){ decision='break'; rel='closing'; }
-    else if(startsSub){ decision='break'; rel='subord-clause'; }
-    else if(startsAdv){ decision='break'; rel='lead-adverbial'; }
+    else if(startsSub){ decision='break'; rel='subord'; }
+    else if(startsAdv){ decision='break'; rel='lead-adv'; }
     else if(it.slot==='classroom' && cur.slot!=='classroom' && curPol!=='neg'){
       rel='classroom';
       const lc=it.text.toLowerCase();
-      const mentions=['class','lesson'].some(k=>lc.includes(k));
-      if(!mentions && !lastWasMarker && Math.random()<0.45){ decision='link'; marker=pickConn(['In class, ','During lessons, '],markerUsed); }
+      const mentions=lc.includes('class')||lc.includes('lesson');
+      if(!mentions && !lastWasMarker && Math.random()<0.45){ decision='link'; marker=pickMarker(['In class, ','During lessons, '],it.text); }
       else decision='break';
     }
     else if(prevPol==='neg' && curPol!=='neg'){
-      rel='lift(neg→pos)';
-      if(!lastWasMarker){
-        decision='link';
-        marker = it.concessive ? pickConn(['That said, ','Nonetheless, '],markerUsed)
-                               : pickConn(['That said, ','Encouragingly, ','On a more positive note, '],markerUsed);
+      rel='lift';
+      if(!lastWasMarker){ decision='link';
+        marker = it.concessive ? pickMarker(['That said, ','Nonetheless, '],it.text)
+                               : pickMarker(['That said, ','Encouragingly, ','On a more positive note, '],it.text);
       } else decision='break';
     }
     else if(prevPol!=='neg' && curPol==='neg'){
-      rel='contrast(→neg)';
-      if(lenOK && !clash && !tooComplex && fuseCount<2){ decision='fuse'; connector=', though '; }
-      else if(!lastWasMarker){ decision='link'; marker=pickConn(['That said, ','Looking ahead, ','Going forward, '],markerUsed); }
+      rel='contrast';
+      if(canFuse && !cur.lift){ decision='fuse'; connector=', though '; }       // B3: never onto a lifted sentence
+      else if(!lastWasMarker){ decision='link'; marker=pickMarker(['That said, ','Looking ahead, ','Going forward, '],it.text); }
       else decision='break';
     }
     else if(prevPol===curPol){
-      rel='addition('+curPol+')';
-      if(!samePoint && lenOK && !clash && !tooComplex && fuseCount<2){
-        decision='fuse';
-        connector = curPol==='pos' ? pickConn([', and ','; ',', as well as '],markerUsed) : pickConn([', and ','; '],markerUsed);
-      } else decision='break';
+      rel='add';
+      if(canFuse){ decision='fuse'; connector=pickConn([', and ','; '],markerUsed); } // A2: no ", as well as"
+      else decision='break';
     }
     else {
-      rel='neutral';
-      if(lenOK && !clash && !tooComplex && fuseCount<2){ decision='fuse'; connector=pickConn([', and ','; '],markerUsed); }
+      rel='neu';
+      if(canFuse){ decision='fuse'; connector=pickConn([', and ','; '],markerUsed); }
       else decision='break';
     }
 
-    diag.cohesion.push({i, rel, decision, connector:(connector||marker||'').trim()});
+    diag.cohesion.push({i,rel,decision,connector:(connector||marker||'').trim()});
 
     if(decision==='fuse'){
-      cur.text = cur.text.replace(/\s*\.\s*$/,'') + connector + asContinuation(it.text, data);
+      cur.text=cur.text.replace(/\s*\.\s*$/,'')+connector+asContinuation(it.text,data);
       if(!/[.!?]$/.test(cur.text)) cur.text+='.';
-      cur.hl = cur.hl || it.hl;
-      cur.pol = it.polarity;
-      cur.slot = it.slot;
-      cur.words = countWords(cur.text);
-      fuseCount++; lastWasMarker=false;
+      cur.hl=cur.hl||it.hl; cur.pol=it.polarity; cur.slot=it.slot;
+      cur.words=countWords(cur.text); fuseCount++; lastWasMarker=false;
     } else {
       units.push(cur);
-      cur={ text: it.text, hl: it.hl||!!marker, pol: it.polarity, slot: it.slot, words: countWords(it.text), marker:marker };
-      lastWasMarker = !!marker;
+      const isLift = marker && liftMarkers.includes(marker);
+      cur={ text:it.text, hl:it.hl||!!marker, pol:it.polarity, slot:it.slot, words:countWords(it.text), marker:marker, lift:isLift };
+      lastWasMarker=!!marker;
     }
   }
   units.push(cur);
   return units;
 }
 
-// exam/examination → paper/assessment after the first occurrence
 function varySeg(text, counter){
   return text.replace(/\bexaminations?\b|\bexam\b/gi,(m)=>{
     counter.n++;
@@ -1136,10 +1209,42 @@ function varySeg(text, counter){
   });
 }
 
-// ============================ TONE ============================
+function renderUnits(units, data){
+  const counter={n:0};
+  let plain='', html='';
+  units.forEach(u=>{
+    const body=varySeg(u.text, counter);
+    if(u.marker){
+      const low=lowerFirst(body,data);
+      if(plain && !/\s$/.test(plain)) plain+=' ';
+      plain += u.marker + low;
+      if(html && !/\s$/.test(html)) html+=' ';
+      html += '<mark>'+esc(u.marker.trim())+'</mark> ' + (u.hl?'<mark>'+esc(low)+'</mark>':esc(low));
+    } else {
+      const cap=capFirst(body);
+      if(plain && !/\s$/.test(plain)) plain+=' ';
+      plain += cap;
+      if(html && !/\s$/.test(html)) html+=' ';
+      html += u.hl?'<mark>'+esc(cap)+'</mark>':esc(cap);
+    }
+  });
+  return { plain: plain.replace(/\s+/g,' ').trim(), html };
+}
+function lowestPriorityUnit(units){
+  let idx=-1,best=-1;
+  for(let i=0;i<units.length;i++){
+    const r=DROPRANK[units[i].slot];
+    if(r===undefined) continue;
+    if(r>best){ best=r; idx=i; }
+  }
+  return idx;
+}
+
+// ============================ TONE (Q4: band weighted heavier) ============================
 function overallTone(data){
   const r=[];
-  r.push(((data.examGrade-1)/6)*4+1);
+  const bandScore=((data.examGrade-1)/6)*4+1;
+  r.push(bandScore,bandScore,bandScore);   // band counts ×3
   if(data.examPrep>0) r.push(data.examPrep);
   Object.values(data.skills).forEach(v=>{ if(v>0) r.push(v); });
   if(data.participation>0) r.push(data.participation);
@@ -1154,6 +1259,31 @@ function overallTone(data){
   if(data.examGrade<=3 && tone==='positive') tone='moderate';
   if(data.examGrade<=2 && tone!=='negative') tone='moderate';
   return tone;
+}
+
+// ============================ CONTENT CAPS ============================
+// C1: keep classroom + one ticked trait; academic drops first
+function applyCharacterCap(items){
+  const classroomPresent=items.some(i=>i.slot==='classroom');
+  const charItems=items.filter(i=>i.slot==='trait'||i.slot==='academic');
+  const keep = 2 - (classroomPresent?1:0);
+  if(charItems.length<=Math.max(0,keep)) return;
+  const ranked=[...charItems].sort((a,b)=>{
+    const av=a.slot==='trait'?0:1, bv=b.slot==='trait'?0:1; return av-bv; // ticked traits before academic
+  });
+  const survivors=new Set(ranked.slice(0,Math.max(0,keep)));
+  for(let i=items.length-1;i>=0;i--){
+    if((items[i].slot==='trait'||items[i].slot==='academic') && !survivors.has(items[i])) items.splice(i,1);
+  }
+}
+// C5: at most two advice constructions in the body
+function applyAdviceCap(items){
+  const isAdv=i=> i.slot==='weakness'||i.slot==='examtarget'||(i.slot==='filler'&&i.polarity!=='pos');
+  const adv=items.filter(isAdv);
+  if(adv.length<=2) return;
+  const ranked=[...adv].sort((a,b)=>(DROPRANK[b.slot]??0)-(DROPRANK[a.slot]??0));
+  const drop=new Set(ranked.slice(0, adv.length-2));
+  for(let i=items.length-1;i>=0;i--) if(drop.has(items[i])) items.splice(i,1);
 }
 
 // ============================ BUILD ============================
@@ -1173,29 +1303,35 @@ function buildComment(data){
   }
   if(data.examPrep>0){
     push(genExamPrep(data,ctx),'examPrep',prepPol(data.examPrep),5,false,false,()=>genExamPrep(data,ctx));
-    if(data.examGrade<=3 && data.examPrep>=4){
-      items[items.length-1].concessive=true;
-    }
+    if(data.examGrade<=3 && data.examPrep>=4){ items[items.length-1].concessive=true; }
   }
 
   const sk=Object.entries(data.skills).filter(([k,v])=>v>0);
-  let topStrengthLvl=0;
+  let topStrengthLvl=0, bestLabel=null;
   if(sk.length){
     const sorted=[...sk].sort((a,b)=>b[1]-a[1]);
     const best=sorted[0], worst=sorted[sorted.length-1];
     if(best[1]>=3){
       const bId=best[0], bLv=best[1];
-      push(genStrength(bId,bLv,data,ctx),'strength','pos',2,false,false,()=>genStrength(bId,bLv,data,ctx));
-      if(items.length) items[items.length-1]._lvl=bLv;
+      bestLabel=getSkillLabel(bId,data.cls);
+      push(genStrengthLabel(bLv,bestLabel,data,ctx),'strength','pos',2,false,false,()=>genStrengthLabel(bLv,bestLabel,data,ctx));
       topStrengthLvl=bLv;
     }
-    if(worst[1]<=2 && worst[0]!==best[0]){
+    // C3: second strength when a second skill is also strong
+    if(sorted.length>=2 && sorted[1][1]>=4 && sorted[1][0]!==best[0]){
+      const s2Lv=sorted[1][1];
+      const s2Label=getSkillLabel(sorted[1][0],data.cls,bestLabel);
+      push(genStrengthLabel(s2Lv,s2Label,data,ctx),'strength2','pos',2,false,false,()=>genStrengthLabel(s2Lv,s2Label,data,ctx));
+    }
+    // weakness (gate generic data lines to data skills — #6)
+    if(worst[1]<=2 && (worst[0]!==best[0] || topStrengthLvl<3)){
       const wId=worst[0], wLv=worst[1];
       push(genWeakness(wId,wLv,data,ctx),'weakness','neg',1,false,false,()=>genWeakness(wId,wLv,data,ctx));
     }
   }
 
-  if(data.examGrade>=5 && topStrengthLvl!==5){
+  // C4: academic only when no genuine strength surfaced
+  if(data.examGrade>=5 && topStrengthLvl<4){
     const apool = data.examGrade>=6 ? PB.academic.high : PB.academic.mid;
     const at=pickFresh(apool,ctx);
     if(at) push(fillTemplate(at,data),'academic','pos',2,false,false,()=>{ const a=pickFresh(apool,ctx); return a?fillTemplate(a,data):null; });
@@ -1207,8 +1343,11 @@ function buildComment(data){
   const N=PB.notes;
   const noteRegen=(pool)=>()=>{ const t=pickFresh(pool,ctx); return t?fillTemplate(t,data):null; };
   if(data.notes.classNotExam) push(fillTemplate(pickFresh(N.classNotExam,ctx),data),'contrast','neu',4,false,false,noteRegen(N.classNotExam));
-  if(data.notes.improved)     push(fillTemplate(pickFresh(N.improved,ctx),data),'improved','pos',5,false,false,noteRegen(N.improved));
-  if(data.notes.attitudeImproved) push(fillTemplate(pickFresh(N.attitudeImproved,ctx),data),'trait','pos',5,false,false,noteRegen(N.attitudeImproved));
+  // D5: if both "improved" notes ticked, keep only one (prefer the exam-improvement)
+  if(data.notes.improved)          push(fillTemplate(pickFresh(N.improved,ctx),data),'improved','pos',5,false,false,noteRegen(N.improved));
+  else if(data.notes.attitudeImproved) push(fillTemplate(pickFresh(N.attitudeImproved,ctx),data),'trait','pos',5,false,false,noteRegen(N.attitudeImproved));
+  if(data.notes.improved && data.notes.attitudeImproved)
+    push(fillTemplate(pickFresh(N.attitudeImproved,ctx),data),'trait','pos',5,false,false,noteRegen(N.attitudeImproved));
   if(data.notes.proactive)    push(fillTemplate(pickFresh(N.proactive,ctx),data),'trait','pos',7,false,false,noteRegen(N.proactive));
   if(data.notes.responsible && !data.ecaRole) push(fillTemplate(pickFresh(N.responsible,ctx),data),'trait','pos',7,false,false,noteRegen(N.responsible));
   if(data.notes.timeManagement) push(fillTemplate(pickFresh(N.timeManagement,ctx),data),'examtarget','neg',3,false,false,noteRegen(N.timeManagement));
@@ -1217,8 +1356,11 @@ function buildComment(data){
   if(data.ecaRole)    push(fillTemplate(pickFresh(PB.eca,ctx),data),'eca','pos',7,true);
   if(data.reviseTopic)push(fillTemplate(pickFresh(PB.topic,ctx),data),'topic','neg',3,true);
 
-  const tone=overallTone(data);
+  // C1 + C5 caps
+  applyCharacterCap(items);
+  applyAdviceCap(items);
 
+  const tone=overallTone(data);
   const hasPos=items.some(i=>i.polarity==='pos'&&i.slot!=='examGrade');
   if(!hasPos && tone!=='positive'){
     const f=pickFresh(PB.filler.positive,ctx);
@@ -1239,38 +1381,28 @@ function buildComment(data){
 
   diag.items = items.map(it=>({slot:it.slot, pol:it.polarity, text:it.text}));
 
-  let texts = applyNameControl(items.map(i=>i.text), data).map(fixSemicolonCaps);
-  texts.forEach((t,k)=>{ items[k].text=t; });
+  let units = cohesionPass(items, data, diag);
+  let unitTexts = applyNameControl(units.map(u=>u.text), data).map(fixSemicolonCaps);
+  unitTexts.forEach((t,k)=>{ units[k].text=t; });
+  let rendered = renderUnits(units, data);
 
-  const units = cohesionPass(items, data, diag);
-
-  const counter={n:0};
-  let plain='', html='';
-  units.forEach(u=>{
-    const body=varySeg(u.text, counter);
-    if(u.marker){
-      const low=lowerFirst(body,data);
-      if(plain && !/\s$/.test(plain)) plain+=' ';
-      plain += u.marker + low;
-      if(html && !/\s$/.test(html)) html+=' ';
-      html += '<mark>'+esc(u.marker.trim())+'</mark> ' + (u.hl?'<mark>'+esc(low)+'</mark>':esc(low));
-    } else {
-      const cap=capFirst(body);
-      if(plain && !/\s$/.test(plain)) plain+=' ';
-      plain += cap;
-      if(html && !/\s$/.test(html)) html+=' ';
-      html += u.hl?'<mark>'+esc(cap)+'</mark>':esc(cap);
-    }
-  });
-  plain=plain.replace(/\s+/g,' ').trim();
-  diag.wc=countWords(plain);
-  return {plain, html, diag};
+  // C2 + hard 90-word safeguard: trim lowest-priority units until within range
+  let guard=12;
+  while(countWords(rendered.plain)>MAX_WORD_COUNT && guard-->0){
+    const idx=lowestPriorityUnit(units);
+    if(idx<0) break;
+    diag.drops.push({slot:units[idx].slot, text:units[idx].text});
+    units.splice(idx,1);
+    rendered=renderUnits(units,data);
+  }
+  diag.wc=countWords(rendered.plain);
+  return { plain:rendered.plain, html:rendered.html, diag };
 }
 
 function reorderBody(items){
   const opener=items[0], closing=items[items.length-1];
   const body=items.slice(1,items.length-1);
-  const THEME={ examGrade:0, examPrep:0, improved:0, contrast:0, strength:0, academic:0, trait:0,
+  const THEME={ examGrade:0, examPrep:0, improved:0, contrast:0, strength:0, strength2:0, academic:0, trait:0,
                 weakness:1, examtarget:1,
                 classroom:2, homework:2, eca:2, filler:2,
                 topic:3 };
@@ -1282,19 +1414,15 @@ function reorderBody(items){
     (a._ord-b._ord));
   items.length=0; items.push(opener,...body,closing);
 }
-
-// drop priority: closing first, then classroom/homework/filler; exam result never dropped
 function enforceCap(items, diag){
-  const dropRank={closing:100, filler:90, homework:80, classroom:70, trait:60, academic:55,
-                  improved:50, contrast:50, examtarget:40, weakness:35, strength:30, examPrep:25};
   const wc=()=>countWords(items.map(i=>i.text).join(' '));
   let guard=25;
   while(wc()>CAP_TARGET && guard-->0){
     let idx=-1,best=-1;
     for(let i=0;i<items.length;i++){
       if(items[i].protected) continue;
-      const r=dropRank[items[i].slot];
-      if(r===undefined) continue; // examGrade/eca/topic etc. never dropped
+      const r=DROPRANK[items[i].slot];
+      if(r===undefined) continue;
       if(r>best){ best=r; idx=i; }
     }
     if(idx===-1) break;
@@ -1302,12 +1430,14 @@ function enforceCap(items, diag){
     items.splice(idx,1);
   }
 }
-function padToMin(items,data,ctx,tone){
+function padToMin(items,data,ctx,tone){   // C7: pad against the true floor
   const key=tone==='positive'?'positive':(tone==='negative'?'negative':'neutral');
-  let pool=[...(PB.filler[key]||[]),...(PB.filler.neutral||[])];
+  let pool = key==='positive' ? [...(PB.filler.positive||[])]
+           : key==='negative' ? [...(PB.filler.negative||[]),...(PB.filler.neutral||[])]
+           : [...(PB.filler.neutral||[])];
   const wc=()=>countWords(items.map(i=>i.text).join(' '));
   let safety=8;
-  while(wc()+10<MIN_WORD_COUNT && safety-->0){
+  while(wc() < MIN_WORD_COUNT && safety-->0){
     const t=pickFresh(pool,ctx); if(!t) break;
     items.push({text:fillTemplate(t,data),slot:'filler',
       polarity:key==='negative'?'neg':(key==='neutral'?'neu':'pos'),pri:8,hl:false,protected:false,
@@ -1328,8 +1458,12 @@ function genExamPrep(data,ctx){
   else pool=PB.examPrep[data.examPrep];
   const t=pickFresh(pool,ctx); return t?fillTemplate(t,data):'';
 }
-function genStrength(id,lvl,data,ctx){ const t=pickFresh(PB.strengths[lvl],ctx); return t?fillTemplate(t,{...data,_skill:getSkillLabel(id,data.cls)}):''; }
-function genWeakness(id,lvl,data,ctx){ const t=pickFresh(PB.weaknesses[lvl],ctx); return t?fillTemplate(t,{...data,_skill:getSkillLabel(id,data.cls)}):''; }
+function genStrengthLabel(lvl,label,data,ctx){ const t=pickFresh(PB.strengths[lvl],ctx); return t?fillTemplate(t,{...data,_skill:label}):''; }
+function genWeakness(id,lvl,data,ctx){
+  let pool=PB.weaknesses[lvl];
+  if(DATA_SKILLS.has(id) && PB.weaknessesData[lvl]) pool=[...pool,...PB.weaknessesData[lvl]];
+  const t=pickFresh(pool,ctx); return t?fillTemplate(t,{...data,_skill:getSkillLabel(id,data.cls)}):'';
+}
 function genHomework(data,ctx){ const t=pickFresh(PB.homework[data.homework],ctx); return t?fillTemplate(t,data):''; }
 function genClassroom(key,data,ctx){ const t=pickFresh(PB.classroom[key],ctx); return t?fillTemplate(t,data):''; }
 function genClosing(data,ctx,tone){
@@ -1347,11 +1481,36 @@ function renderDiag(diag){
   diag.items.forEach((it,i)=>{ s+='  '+i+'. ['+it.slot+'/'+it.pol+'] '+escTxt(it.text)+'\n'; });
   if(diag.rerolls.length){ s+='\n<b>Repeat re-rolls:</b>\n'; diag.rerolls.forEach(r=>{ s+='  item '+r.i+' re-rolled  (trigger stem: "'+escTxt(r.trigger)+'")\n'; }); }
   else { s+='\n<b>Repeat re-rolls:</b> none\n'; }
-  if(diag.drops.length){ s+='\n<b>Dropped (over '+CAP_TARGET+'w cap):</b>\n'; diag.drops.forEach(d=>{ s+='  ['+d.slot+'] '+escTxt(d.text)+'\n'; }); }
+  if(diag.drops.length){ s+='\n<b>Dropped (cap):</b>\n'; diag.drops.forEach(d=>{ s+='  ['+d.slot+'] '+escTxt(d.text)+'\n'; }); }
   s+='\n<b>Cohesion decisions:</b>\n';
   diag.cohesion.forEach(c=>{ s+='  @'+c.i+'  '+c.rel+'  →  '+c.decision.toUpperCase()+(c.connector?'  ["'+escTxt(c.connector)+'"]':'')+'\n'; });
   s+='\n<b>Final word count:</b> '+diag.wc+'\n</div>';
   return s;
+}
+
+// ============================ COVERAGE METER (C9) ============================
+function updateCoverage(){
+  let n=0;
+  if(+document.getElementById('examPrep').value>0) n++;
+  document.querySelectorAll('[id^="skill_"]').forEach(s=>{ if(+s.value>0) n++; });
+  if(+document.getElementById('participation').value>0) n++;
+  if(+document.getElementById('behaviour').value>0) n++;
+  if(+document.getElementById('homework').value>0) n++;
+  ['chkTime','chkImproved','chkAttitude','chkCareless','chkProactive','chkResponsible','chkClassNotExam']
+    .forEach(id=>{ const el=document.getElementById(id); if(el&&el.checked) n++; });
+  if(document.getElementById('ecaRole').value.trim()) n++;
+  if(document.getElementById('reviseTopic').value.trim()) n++;
+  const charTicks=(document.getElementById('chkProactive').checked?1:0)
+                 +(document.getElementById('chkResponsible').checked?1:0)
+                 +(document.getElementById('chkAttitude').checked?1:0);
+  const el=document.getElementById('coverageMeter');
+  let cls,msg;
+  if(n<4){ cls='cov-amber'; msg=`Coverage: ${n} aspect${n===1?'':'s'} — a little thin. Consider adding one or two more for a fuller comment.`; }
+  else if(n<=6){ cls='cov-green'; msg=`Coverage: ${n} aspects — ideal for a focused 50–90 word comment.`; }
+  else { cls='cov-amber'; msg=`Coverage: ${n} aspects — quite full. Some detail may be trimmed to stay within 90 words; your exam result, strengths and ticked notes are kept.`; }
+  if(charTicks>=2) msg+=' At most two character notes will appear, to keep the comment focused.';
+  el.className='coverage-meter '+cls;
+  el.textContent=msg;
 }
 
 // ============================ UI ============================
@@ -1386,6 +1545,7 @@ function updateAcademicFields(){
   });
   html+='</div>';
   document.getElementById('academicFields').innerHTML=html;
+  updateCoverage();
 }
 function getFormData(){
   const name=studentName.value.trim();
@@ -1544,6 +1704,10 @@ function loadBatch(){ try{ const d=localStorage.getItem(LS_KEY); if(d) batchQueu
 updateAcademicFields();
 loadBatch();
 renderBatchList();
+updateCoverage();
+const mc=document.getElementById('mainCard');
+mc.addEventListener('input',updateCoverage);
+mc.addEventListener('change',updateCoverage);
 </script>
 </body>
 </html>
